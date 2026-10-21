@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "Banana Service — Premium, High-Performance Discord Bot for Script Management, Community Automation & Server Utilities",
   "type": "module",
-  "main": "src/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
+    "start": "node index.js",
+    "dev": "node --watch index.js",
     "deploy": "node src/deploy-commands.js",
     "deploy:guild": "node src/deploy-commands.js --guild",
     "test": "node --test tests/**/*.test.js"

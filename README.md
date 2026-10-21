@@ -58,6 +58,7 @@
 
 ```
 Banana-Service/
+├── index.js                    # Root startup shim for hosts expecting index.js
 ├── assets/                     # Banana Service brand assets
 │   ├── banana_service_logo.png # User-provided bot logo / application icon
 │   └── banana_service_banner.png # User-provided banner artwork
@@ -341,7 +342,7 @@ Railway deploys from GitHub. Push this branch (or merge it to `main`) and make s
 1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**.
 2. Select the `Banana-Service` repository. Railway auto-detects Node via Nixpacks; `railway.json` and `Procfile` are already in the repo, so no build config is needed.
    - Build command: `npm ci --omit=dev`
-   - Start command: `node src/index.js`
+   - Start command: `node index.js` (or `npm start`)
 
 ### Step 3 — Attach a Volume (critical)
 1. In your service, open the **Variables** tab → **Attach Volume** (or **New Volume**).
@@ -451,7 +452,7 @@ npm install -g pm2
 
 Start Banana Service as a persistent daemon:
 ```bash
-pm2 start src/index.js --name "banana-service"
+pm2 start index.js --name "banana-service"
 pm2 save
 pm2 startup
 ```
@@ -472,7 +473,7 @@ After=network.target
 Type=simple
 User=user
 WorkingDirectory=/home/user/Banana-Service
-ExecStart=/usr/bin/node src/index.js
+ExecStart=/usr/bin/node index.js
 Restart=always
 RestartSec=10
 EnvironmentFile=/home/user/Banana-Service/.env
