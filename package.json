@@ -23,6 +23,9 @@
   ],
   "author": "Banana Service Team",
   "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
     "discord.js": "^14.17.3",

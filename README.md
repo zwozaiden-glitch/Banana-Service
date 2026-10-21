@@ -194,7 +194,16 @@ Banana Service ships a native `node:test` suite (no extra test framework require
 npm test
 ```
 
-Current results — **33 assertions across 7 suites, all passing**:
+Current results — **39 assertions across 8 suites, all passing**:
+
+```
+✔ Storage Configuration & Volume Relocation (5 subtests)
+  ✔ All writable artifacts live under one data root by default
+  ✔ DATA_DIR relocates database, scripts, transcripts AND backups together
+  ✔ Individual overrides still win over DATA_DIR
+  ✔ Brand asset paths point at files that actually exist
+  ✔ Script size cap and extension allowlist are configured
+```
 
 ```
 ✔ Slash Command Registry Integrity (6 subtests)
@@ -231,8 +240,8 @@ Current results — **33 assertions across 7 suites, all passing**:
 ✔ Translation Tokenization & Code Preservation (1 subtest)
   ✔ Protects code blocks, inline code, URLs, and Discord mentions
 
-# tests 33
-# pass 33
+# tests 39
+# pass 39
 # fail 0
 ```
 
@@ -309,6 +318,105 @@ Current results — **33 assertions across 7 suites, all passing**:
    - Prevents unauthorized elevation or permission bypasses.
 5. **Deduplication**:
    - YouTube poller and giveaway entries use SQLite `UNIQUE` constraints to eliminate duplicate alerts and duplicate entries.
+
+---
+
+## 🚂 Deploy to Railway
+
+Railway is the easiest managed host for Banana Service. **One thing matters more than everything else below:** Railway's default filesystem is **ephemeral** — every deploy wipes it. Banana Service keeps its database, uploaded scripts, and ticket transcripts on disk, so you must attach a **Volume** or you will lose all data on each redeploy.
+
+### Step 1 — Push the repo to GitHub
+Railway deploys from GitHub. Push this branch (or merge it to `main`) and make sure the repo is reachable by your Railway account.
+
+### Step 2 — Create the project and service
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**.
+2. Select the `Banana-Service` repository. Railway auto-detects Node via Nixpacks; `railway.json` and `Procfile` are already in the repo, so no build config is needed.
+   - Build command: `npm ci --omit=dev`
+   - Start command: `node src/index.js`
+
+### Step 3 — Attach a Volume (critical)
+1. In your service, open the **Variables** tab → **Attach Volume** (or **New Volume**).
+2. Set the mount path to `/data`.
+3. This makes `/data` persist across deploys and restarts.
+
+### Step 4 — Set environment variables
+Open **Variables** → **New Variable** and add:
+
+| Variable | Value | Notes |
+| :--- | :--- | :--- |
+| `DISCORD_TOKEN` | your bot token | **Required.** Mark as secret. |
+| `CLIENT_ID` | your application ID | **Required** for slash-command deployment. |
+| `DATA_DIR` | `/data` | **Required.** Must match the volume mount path. |
+| `DEV_GUILD_ID` | your test server ID | Optional. Instant command registration. |
+| `NODE_ENV` | `production` | Optional. |
+| `YOUTUBE_CHECK_INTERVAL_SECONDS` | `180` | Optional. Polling frequency. |
+| `YOUTUBE_API_KEY` | your key | Optional. Improves reliability/quota. |
+| `TRANSLATION_API_KEY` | your key | Optional. |
+| `MAX_SCRIPT_SIZE_MB` | `8` | Optional. |
+
+> ⚠️ **Never** paste your token into the database, `README`, or any committed file. Railway Variables are encrypted and injected at runtime only.
+
+### Step 5 — Register slash commands (one-time)
+Slash commands are registered through Discord's REST API, not by the running bot. Run this **once** after your first deploy:
+
+```bash
+# Locally, with your .env filled in:
+npm run deploy:guild   # instant, single test server (uses DEV_GUILD_ID)
+npm run deploy         # global, can take up to 1 hour to propagate
+```
+
+Or run it as a one-off on Railway:
+```bash
+railway run npm run deploy
+```
+
+You only need to re-run this when you add or change commands.
+
+### Step 6 — Deploy and verify
+Railway deploys automatically on push. Check **Deploy Logs** for:
+```
+🍌 Initializing Banana Service Database...
+✅ Database connected and WAL mode enabled.
+✅ Loaded 38 Banana Service commands.
+=====================================================
+🍌 BANANA SERVICE DISCORD BOT ONLINE
+=====================================================
+[YouTube Poller] Started with 180s interval.
+```
+
+If you see `DISCORD_TOKEN is not configured`, your Variables aren't attached to the service.
+
+### Railway-specific notes
+
+- **No public networking needed.** The bot connects outbound to Discord's gateway; you do **not** need to generate a public domain or expose a port. Do not enable "Public Networking" — it just wastes a hostname.
+- **One replica only.** Run exactly **1 replica**. Two instances would double-post announcements, double-announce YouTube videos, and race on giveaway timers, because scheduling is in-process.
+- **Persistent storage.** With `DATA_DIR=/data` mounted, the SQLite database (`/data/banana_service.db`), uploaded scripts (`/data/scripts`), transcripts (`/data/transcripts`), and `/backup` snapshots (`/data/backups`) all survive restarts and redeploys.
+- **Restarts are safe.** Giveaway timers are rehydrated from the database on the `ready` event, and the YouTube poller re-reads its trackers from SQLite, so nothing is lost when Railway restarts the container.
+- **Memory.** The bot idles around 80–120 MB. Railway's 512 MB plan limit is comfortable.
+- **Native module.** `better-sqlite3` compiles a native binding during `npm ci`. Railway's Nixpacks image includes the build toolchain, so this works out of the box.
+
+### ⏱️ Is the YouTube tracker "real time"?
+
+**Not strictly — it is near-real-time polling, and that is deliberate.**
+
+Banana Service checks each tracked channel's public RSS feed (`https://www.youtube.com/feeds/videos.xml?channel_id=...`) on a fixed interval — **every 180 seconds by default** — and compares the newest `videoId` against `last_video_id` stored in SQLite. A new upload is announced on the next poll.
+
+| Aspect | Behaviour |
+| :--- | :--- |
+| Typical latency | 0–180 s after YouTube publishes the video to its feed |
+| Worst case | Up to one interval (tune via `YOUTUBE_CHECK_INTERVAL_SECONDS`) |
+| Duplicates | Impossible — `last_video_id` is persisted per tracker |
+| Missed videos | None — if the bot is down, the next poll still catches the newest upload |
+| Cost | Free. No YouTube API key required; the key is optional and only raises quota/metadata quality |
+
+**Why not a webhook?** YouTube offers no push webhook for new uploads, and PubSubHubbub requires a public HTTPS endpoint plus lease renewal — heavier and more fragile than polling for this use case. Polling also keeps the bot deployable without exposing any port.
+
+**Tuning the interval:**
+```env
+YOUTUBE_CHECK_INTERVAL_SECONDS=60   # check every minute (more responsive)
+YOUTUBE_CHECK_INTERVAL_SECONDS=600  # check every 10 minutes (lighter on quota)
+```
+Avoid going below ~30 s: YouTube's RSS feeds are themselves cached upstream for roughly 1–5 minutes, so polling faster than that burns requests without finding new videos sooner.
 
 ---
 
