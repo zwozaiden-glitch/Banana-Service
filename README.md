@@ -20,7 +20,8 @@
 
 ### 📢 2. Automated Announcements & YouTube Tracker
 - **Automatic Script Release Updates**: When a new script is uploaded or updated, Banana Service automatically broadcasts a release embed to designated channels with changelogs and instant download buttons.
-- **YouTube Video Tracker**: Periodically monitors YouTube channels via RSS feeds or YouTube Data API v3. Eliminates duplicate alerts by tracking last processed video IDs in persistent storage.
+- **YouTube Video Tracker**: Polls each configured channel's public RSS feed every 180 seconds by default. `/youtube add` chooses the YouTube channel, Discord destination, optional role ping, and custom message; tracker state survives restarts in SQLite.
+- **Reliable Alerts**: New feed entries are announced oldest-first, duplicate alerts are prevented, failed Discord sends are retried, and custom alert text cannot trigger arbitrary mentions.
 - **Rich Server Announcements**: Publish announcements with custom colors, embeds, and role pings (`/announce`).
 
 ### 🎫 3. Customizable Support Ticket System
@@ -57,9 +58,9 @@
 
 ```
 Banana-Service/
-├── assets/                     # Banana Service brand assets (vector SVG)
-│   ├── banana_service_logo.svg # Bot avatar / application icon
-│   └── banana_service_banner.svg # Server banner artwork
+├── assets/                     # Banana Service brand assets
+│   ├── banana_service_logo.png # User-provided bot logo / application icon
+│   └── banana_service_banner.png # User-provided banner artwork
 ├── data/                       # Persistent storage (auto-created)
 │   ├── banana_service.db       # SQLite database (WAL mode)
 │   ├── scripts/                # Uploaded script storage
@@ -145,17 +146,21 @@ CLIENT_ID=123456789012345678
 DEV_GUILD_ID=123456789012345678
 
 # Storage & Database
-DATABASE_PATH=./data/banana_service.db
-STORAGE_DIR=./data/scripts
+# On Railway, mount a Volume at /data and set DATA_DIR=/data.
+DATA_DIR=./data
+# Optional per-path overrides; leave blank to follow DATA_DIR.
+DATABASE_PATH=
+STORAGE_DIR=
+TRANSCRIPTS_DIR=
+BACKUPS_DIR=
 MAX_SCRIPT_SIZE_MB=8
 
 # Branding
 DEFAULT_EMBED_COLOR=#FFE135
 BOT_STATUS_TEXT=🍌 Serving Banana Scripts | /help
 
-# YouTube Poller (Checks every 180 seconds by default)
+# YouTube RSS poller (no API key required)
 YOUTUBE_CHECK_INTERVAL_SECONDS=180
-YOUTUBE_API_KEY=
 
 # Translation
 TRANSLATION_API_URL=https://libretranslate.com/translate
@@ -188,13 +193,13 @@ npm run dev
 
 ## 🧪 Running Automated Tests
 
-Banana Service ships a native `node:test` suite (no extra test framework required) covering seven areas: the SQLite schema, file security, script versioning/rollback, giveaway persistence, ticket categories, translation tokenisation, and the command registry.
+Banana Service ships a native `node:test` suite (no extra test framework required) covering nine areas: storage configuration, the SQLite schema, file security, script versioning/rollback, giveaway persistence, ticket categories, translation tokenisation, the command registry, and automatic YouTube alerts.
 
 ```bash
 npm test
 ```
 
-Current results — **39 assertions across 8 suites, all passing**:
+Current results — **43 tests across 9 suites, all passing**:
 
 ```
 ✔ Storage Configuration & Volume Relocation (5 subtests)
@@ -206,7 +211,7 @@ Current results — **39 assertions across 8 suites, all passing**:
 ```
 
 ```
-✔ Slash Command Registry Integrity (6 subtests)
+✔ Slash Command Registry Integrity (7 subtests)
   ✔ Every command exposes data + execute handler
   ✔ All commands serialize to valid Discord API JSON
   ✔ Message context menu translation command is registered
@@ -239,9 +244,13 @@ Current results — **39 assertions across 8 suites, all passing**:
   ✔ Supports custom category addition and reordering
 ✔ Translation Tokenization & Code Preservation (1 subtest)
   ✔ Protects code blocks, inline code, URLs, and Discord mentions
+✔ YouTube Tracker automatic alerts, persistence, retries and mention safety (3 subtests)
+  ✔ Adding a channel stores the latest existing video as the starting point
+  ✔ The poller announces every unseen feed entry once, in upload order
+  ✔ Failed Discord delivery does not consume the video; next poll retries
 
-# tests 39
-# pass 39
+# tests 43
+# pass 43
 # fail 0
 ```
 
@@ -349,10 +358,11 @@ Open **Variables** → **New Variable** and add:
 | `DATA_DIR` | `/data` | **Required.** Must match the volume mount path. |
 | `DEV_GUILD_ID` | your test server ID | Optional. Instant command registration. |
 | `NODE_ENV` | `production` | Optional. |
-| `YOUTUBE_CHECK_INTERVAL_SECONDS` | `180` | Optional. Polling frequency. |
-| `YOUTUBE_API_KEY` | your key | Optional. Improves reliability/quota. |
+| `YOUTUBE_CHECK_INTERVAL_SECONDS` | `180` | Optional. RSS polling frequency; no YouTube API key is needed. |
 | `TRANSLATION_API_KEY` | your key | Optional. |
 | `MAX_SCRIPT_SIZE_MB` | `8` | Optional. |
+
+Leave `DATABASE_PATH`, `STORAGE_DIR`, `TRANSCRIPTS_DIR`, and `BACKUPS_DIR` unset in Railway unless you intentionally want a separate override; otherwise they inherit paths under `DATA_DIR=/data`.
 
 > ⚠️ **Never** paste your token into the database, `README`, or any committed file. Railway Variables are encrypted and injected at runtime only.
 
@@ -395,28 +405,39 @@ If you see `DISCORD_TOKEN is not configured`, your Variables aren't attached to 
 - **Memory.** The bot idles around 80–120 MB. Railway's 512 MB plan limit is comfortable.
 - **Native module.** `better-sqlite3` compiles a native binding during `npm ci`. Railway's Nixpacks image includes the build toolchain, so this works out of the box.
 
+### Turn on automatic YouTube video alerts
+
+After the bot is invited to your server and slash commands are registered, run `/youtube add` as an administrator:
+
+- **channel**: paste the YouTube channel URL or handle, such as `https://www.youtube.com/@YourCreator`.
+- **notification_channel**: select the Discord text channel where the alert should be posted.
+- **ping_role** *(optional)*: select the role to notify when a new upload arrives.
+- **custom_message** *(optional)*: enter a short header such as `🍌 New video is live!`.
+
+The bot confirms the tracked channel, then checks automatically while online. The first add records the channel's current latest video as the baseline, so it starts alerting on uploads after setup rather than announcing an old video immediately. Tracker settings and the last successfully announced video are stored in SQLite and survive restarts when Railway's `/data` volume is attached.
+
+Give the bot **View Channel**, **Send Messages**, and **Embed Links** permissions in the notification channel. The configured role ping is the only mention allowed by the tracker; custom text cannot trigger `@everyone` or other roles.
+
 ### ⏱️ Is the YouTube tracker "real time"?
 
-**Not strictly — it is near-real-time polling, and that is deliberate.**
-
-Banana Service checks each tracked channel's public RSS feed (`https://www.youtube.com/feeds/videos.xml?channel_id=...`) on a fixed interval — **every 180 seconds by default** — and compares the newest `videoId` against `last_video_id` stored in SQLite. A new upload is announced on the next poll.
+**It is automatic, but not instant:** Banana Service polls each tracked channel's public RSS feed (`https://www.youtube.com/feeds/videos.xml?channel_id=...`) every **180 seconds by default**. YouTube also controls when a video appears in that feed, so actual alert latency may exceed one poll interval. No YouTube API key is required.
 
 | Aspect | Behaviour |
 | :--- | :--- |
-| Typical latency | 0–180 s after YouTube publishes the video to its feed |
-| Worst case | Up to one interval (tune via `YOUTUBE_CHECK_INTERVAL_SECONDS`) |
-| Duplicates | Impossible — `last_video_id` is persisted per tracker |
-| Missed videos | None — if the bot is down, the next poll still catches the newest upload |
-| Cost | Free. No YouTube API key required; the key is optional and only raises quota/metadata quality |
+| Poll interval | 180 s by default; tune with `YOUTUBE_CHECK_INTERVAL_SECONDS` |
+| Alert latency | Usually within one poll after YouTube publishes the upload to its RSS feed; YouTube's feed delay is outside the bot's control |
+| Duplicate prevention | The last successfully announced video ID is persisted in SQLite; a rare crash after Discord accepts a post but before SQLite updates can cause a retry/duplicate |
+| Catch-up after downtime | Announces unseen videos still present in YouTube's feed, in upload order. If the saved video has aged out of the feed, it announces the newest available upload rather than replaying an unknown backlog |
+| Cost | Free RSS feed; no YouTube Data API key required |
 
-**Why not a webhook?** YouTube offers no push webhook for new uploads, and PubSubHubbub requires a public HTTPS endpoint plus lease renewal — heavier and more fragile than polling for this use case. Polling also keeps the bot deployable without exposing any port.
+**Why not a webhook?** YouTube's standard public upload feed is polled here; push subscriptions require a public HTTPS callback and lease renewal. Polling keeps this bot deployable without exposing a network port.
 
 **Tuning the interval:**
 ```env
 YOUTUBE_CHECK_INTERVAL_SECONDS=60   # check every minute (more responsive)
-YOUTUBE_CHECK_INTERVAL_SECONDS=600  # check every 10 minutes (lighter on quota)
+YOUTUBE_CHECK_INTERVAL_SECONDS=600  # check every 10 minutes (lighter polling)
 ```
-Avoid going below ~30 s: YouTube's RSS feeds are themselves cached upstream for roughly 1–5 minutes, so polling faster than that burns requests without finding new videos sooner.
+YouTube can cache feeds, so polling more frequently does not guarantee faster alerts.
 
 ---
 
@@ -470,11 +491,11 @@ sudo systemctl start banana-service
 ---
 
 ## 🍌 Brand Assets
-Banana Service ships vector brand artwork in `assets/` (no raster/binary blobs, so they stay tiny in git and scale to any size):
-- `assets/banana_service_logo.svg`: Banana Service bot avatar (banana-yellow `#FFE135` tile, banana crescent + terminal prompt glyph). Export to PNG at 512×512 for the Discord application icon.
-- `assets/banana_service_banner.svg`: Charcoal `#111827` server banner with golden accents and feature chips. Export to 960×540 PNG for the Discord server banner.
+The supplied brand artwork is included as the primary Banana Service branding:
+- `assets/banana_service_logo.png` (1254×1254): square logo for the bot/application icon.
+- `assets/banana_service_banner.png` (1983×793): wide `One for everyone` banner.
 
-Both are plain SVG source, so recoloring is a one-line edit — swap `#FFE135` for your guild's brand color.
+The bot config points to these files at `config.branding.avatarPath` and `config.branding.bannerPath`; `/botinfo` attaches both directly (logo thumbnail and banner image). To show the logo as the bot's Discord profile avatar or the banner on its application profile, upload them manually in the Discord Developer Portal/application settings—Railway cannot apply Discord profile artwork.
 
 ---
 

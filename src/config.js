@@ -44,8 +44,8 @@ export const config = {
     statusText: process.env.BOT_STATUS_TEXT || '🍌 Serving Banana Scripts | /help',
     statusType: process.env.BOT_STATUS_TYPE || 'Watching',
     defaultFooter: 'Banana Service • Premium Discord Suite 🍌',
-    avatarPath: path.join(rootDir, 'assets', 'banana_service_logo.svg'),
-    bannerPath: path.join(rootDir, 'assets', 'banana_service_banner.svg'),
+    avatarPath: path.join(rootDir, 'assets', 'banana_service_logo.png'),
+    bannerPath: path.join(rootDir, 'assets', 'banana_service_banner.png'),
   },
 
   // Storage & Files
@@ -62,7 +62,6 @@ export const config = {
   // YouTube Polling
   youtube: {
     pollIntervalSeconds: parseInt(process.env.YOUTUBE_CHECK_INTERVAL_SECONDS, 10) || 180,
-    apiKey: process.env.YOUTUBE_API_KEY || null,
   },
 
   // Translation Service

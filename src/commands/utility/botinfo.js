@@ -1,5 +1,6 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { AttachmentBuilder, SlashCommandBuilder } from 'discord.js';
 import { getGuildSettings } from '../../database/db.js';
+import { config } from '../../config.js';
 import { createBananaEmbed } from '../../utils/embeds.js';
 import os from 'node:os';
 
@@ -33,9 +34,15 @@ export default {
         { name: '💻 Host Platform', value: `\`${os.type()} ${os.arch()}\``, inline: true },
         { name: '🛡️ Storage Engine', value: '`SQLite 3 (WAL Mode)`', inline: true },
       ],
-      thumbnail: client.user.displayAvatarURL(),
+      thumbnail: 'attachment://banana_service_logo.png',
+      image: 'attachment://banana_service_banner.png',
     });
 
-    return interaction.reply({ embeds: [embed] });
+    const brandAssets = [
+      new AttachmentBuilder(config.branding.avatarPath, { name: 'banana_service_logo.png' }),
+      new AttachmentBuilder(config.branding.bannerPath, { name: 'banana_service_banner.png' }),
+    ];
+
+    return interaction.reply({ embeds: [embed], files: brandAssets });
   },
 };

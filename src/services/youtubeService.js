@@ -6,6 +6,8 @@ import { config } from '../config.js';
 
 export class YouTubeService {
   static pollerInterval = null;
+  static pollerTimeout = null;
+  static pollInProgress = false;
 
   /**
    * Resolves a YouTube channel ID from a channel URL, handle, or ID
@@ -181,66 +183,90 @@ export class YouTubeService {
   }
 
   /**
-   * Checks all active trackers across all guilds and posts announcements for new videos
+   * Checks all active trackers and announces every video still present in the
+   * feed since the last successfully delivered announcement. YouTube's RSS feed
+   * is newest-first; reverse the unseen slice so posts arrive chronologically.
    */
   static async checkTrackers(client) {
-    const db = getDatabase();
-    const activeTrackers = db.prepare('SELECT * FROM youtube_trackers WHERE is_active = 1').all();
+    // A slow RSS request must not let setInterval start a duplicate poll.
+    if (this.pollInProgress) return;
+    this.pollInProgress = true;
 
-    for (const tracker of activeTrackers) {
-      try {
-        const feed = await this.fetchChannelFeed(tracker.channel_id);
-        if (!feed.videos || feed.videos.length === 0) continue;
+    try {
+      const db = getDatabase();
+      const activeTrackers = db.prepare('SELECT * FROM youtube_trackers WHERE is_active = 1').all();
 
-        const latest = feed.videos[0];
-        // If it's a new video
-        if (latest.videoId && latest.videoId !== tracker.last_video_id) {
-          // Send announcement to Discord channel
-          await this.postVideoNotification(client, tracker, latest);
+      for (const tracker of activeTrackers) {
+        try {
+          const feed = await this.fetchChannelFeed(tracker.channel_id);
+          const videos = (feed.videos || []).filter(video => video.videoId);
+          if (videos.length === 0) {
+            db.prepare('UPDATE youtube_trackers SET last_checked_at = CURRENT_TIMESTAMP WHERE id = ?').run(tracker.id);
+            continue;
+          }
 
-          // Update last_video_id in database
-          db.prepare(`
-            UPDATE youtube_trackers
-            SET last_video_id = ?, last_checked_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `).run(latest.videoId, tracker.id);
-        } else {
-          // Just update last_checked_at
+          const lastIndex = tracker.last_video_id
+            ? videos.findIndex(video => video.videoId === tracker.last_video_id)
+            : -1;
+
+          let unseenVideos;
+          if (lastIndex >= 0) {
+            // RSS is newest-first; only entries before the saved ID are new.
+            unseenVideos = videos.slice(0, lastIndex).reverse();
+          } else {
+            // If the stored ID has aged out of YouTube's RSS window, announce
+            // the newest upload only rather than replaying an unknown backlog.
+            unseenVideos = videos[0].videoId === tracker.last_video_id ? [] : [videos[0]];
+          }
+
+          for (const video of unseenVideos) {
+            const delivered = await this.postVideoNotification(client, tracker, video);
+            // Keep the last successfully delivered ID so transient Discord
+            // permission/network failures are retried on the next poll.
+            if (!delivered) break;
+
+            db.prepare(`
+              UPDATE youtube_trackers
+              SET last_video_id = ?, last_checked_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `).run(video.videoId, tracker.id);
+          }
+
           db.prepare('UPDATE youtube_trackers SET last_checked_at = CURRENT_TIMESTAMP WHERE id = ?').run(tracker.id);
+        } catch (err) {
+          console.warn(`[YouTube Tracker] Error checking channel ${tracker.channel_name} (${tracker.channel_id}):`, err.message);
         }
-      } catch (err) {
-        console.warn(`[YouTube Tracker] Error checking channel ${tracker.channel_name} (${tracker.channel_id}):`, err.message);
       }
+    } finally {
+      this.pollInProgress = false;
     }
   }
 
   /**
-   * Posts formatted video notification embed to Discord
+   * Posts a formatted video announcement. Returns true only after Discord accepts
+   * the message, allowing failed deliveries to be retried on the next poll.
    */
   static async postVideoNotification(client, tracker, video) {
     try {
       const guild = client.guilds.cache.get(tracker.guild_id) || await client.guilds.fetch(tracker.guild_id).catch(() => null);
-      if (!guild) return;
+      if (!guild) return false;
 
       const channel = guild.channels.cache.get(tracker.discord_channel_id) || await guild.channels.fetch(tracker.discord_channel_id).catch(() => null);
-      if (!channel || !channel.isTextBased()) return;
+      if (!channel || !channel.isTextBased()) return false;
 
       const guildSettings = getGuildSettings(tracker.guild_id);
       const banana = getGuildEmoji(guildSettings, 'banana');
       const ytEmoji = getGuildEmoji(guildSettings, 'youtube');
 
-      let pingText = '';
-      if (tracker.ping_role_id) {
-        pingText = `<@&${tracker.ping_role_id}>\n`;
-      }
-
-      const defaultMsg = `${banana} **NEW VIDEO JUST DROPPED!**\n\n**${video.title}**\n\nCreator: **${video.author}**\nWatch it here: ${video.url}`;
-      const content = pingText + (tracker.custom_message ? `${tracker.custom_message}\n${video.url}` : defaultMsg);
+      const pingText = tracker.ping_role_id ? `<@&${tracker.ping_role_id}>\n` : '';
+      const customMessage = tracker.custom_message?.trim();
+      const defaultMsg = `${banana} **New video from ${video.author}!**\n\n**${video.title}**\n\n${video.url}`;
+      const content = pingText + (customMessage ? `${customMessage}\n${video.url}` : defaultMsg);
 
       const embed = createBananaEmbed(guildSettings, {
         title: `${ytEmoji} ${video.title}`,
         url: video.url,
-        description: video.description ? video.description.slice(0, 300) + '...' : `Watch the latest upload from **${video.author}**!`,
+        description: video.description ? video.description.slice(0, 300) : `Watch the latest upload from **${video.author}**!`,
         image: video.thumbnail,
         fields: [
           { name: 'Channel', value: `[${video.author}](${tracker.channel_url || video.url})`, inline: true },
@@ -249,34 +275,61 @@ export class YouTubeService {
         color: '#FF0000',
       });
 
-      await channel.send({ content, embeds: [embed] });
+      await channel.send({
+        content,
+        embeds: [embed],
+        // Custom text cannot trigger @everyone or arbitrary user/role mentions;
+        // only the explicitly configured notification role may be pinged.
+        allowedMentions: {
+          parse: [],
+          roles: tracker.ping_role_id ? [tracker.ping_role_id] : [],
+          users: [],
+          repliedUser: false,
+        },
+      });
+      return true;
     } catch (err) {
-      console.error('Failed to post YouTube notification:', err);
+      console.error(`Failed to post YouTube notification for ${tracker.channel_name}:`, err);
+      return false;
     }
   }
 
   /**
-   * Starts periodic polling in background
+   * Starts periodic polling in the background. The initial timeout is tracked
+   * so graceful shutdown can cancel both scheduled jobs cleanly.
    */
   static startPoller(client, intervalSeconds = config.youtube.pollIntervalSeconds) {
-    if (this.pollerInterval) {
-      clearInterval(this.pollerInterval);
-    }
+    this.stopPoller();
+    const parsedInterval = Number.parseInt(intervalSeconds, 10);
+    const safeInterval = Number.isFinite(parsedInterval) && parsedInterval > 0
+      ? parsedInterval
+      : config.youtube.pollIntervalSeconds;
 
-    console.log(`[YouTube Poller] Started with ${intervalSeconds}s interval.`);
+    console.log(`[YouTube Poller] Started with ${safeInterval}s interval.`);
 
-    // Run first check after 10 seconds
-    setTimeout(() => this.checkTrackers(client), 10000);
+    const runPoll = () => {
+      this.checkTrackers(client).catch(err => {
+        console.error('[YouTube Poller] Unhandled polling error:', err);
+      });
+    };
 
-    this.pollerInterval = setInterval(() => {
-      this.checkTrackers(client);
-    }, intervalSeconds * 1000);
+    // Run first check after 10 seconds so the bot finishes its Discord startup.
+    this.pollerTimeout = setTimeout(() => {
+      this.pollerTimeout = null;
+      runPoll();
+    }, 10000);
+
+    this.pollerInterval = setInterval(runPoll, safeInterval * 1000);
   }
 
   static stopPoller() {
     if (this.pollerInterval) {
       clearInterval(this.pollerInterval);
       this.pollerInterval = null;
+    }
+    if (this.pollerTimeout) {
+      clearTimeout(this.pollerTimeout);
+      this.pollerTimeout = null;
     }
   }
 }
