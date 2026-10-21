@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540" role="img" aria-label="Banana Service banner">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1F2937"/>
+      <stop offset="60%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#0B1220"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFE135" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#FFE135" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="peelGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFDE7"/>
+      <stop offset="45%" stop-color="#FFE863"/>
+      <stop offset="100%" stop-color="#F5B301"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="540" fill="url(#bgGrad)"/>
+
+  <!-- Diagonal accent stripes -->
+  <g opacity="0.12">
+    <path d="M -60 540 L 200 -60 L 320 -60 L 60 540 Z" fill="#FFE135"/>
+    <path d="M 120 540 L 380 -60 L 440 -60 L 180 540 Z" fill="#FFE135"/>
+    <path d="M 700 540 L 960 -60 L 1020 -60 L 760 540 Z" fill="#FFE135"/>
+  </g>
+
+  <!-- Radial glow behind banana -->
+  <circle cx="740" cy="270" r="230" fill="url(#glow)"/>
+
+  <!-- Large banana -->
+  <g transform="translate(560, 96) scale(1.05)">
+    <path d="M 20 300
+             C 12 160 116 44 268 44
+             C 178 84 92 186 86 306 Z"
+          fill="url(#peelGrad)" stroke="#1F2937" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M 20 300 L 4 312" stroke="#1F2937" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="2" cy="314" r="8" fill="#1F2937"/>
+    <circle cx="272" cy="42" r="9" fill="#1F2937"/>
+    <path d="M 58 258 C 72 176 130 118 208 96" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" opacity="0.5"/>
+  </g>
+
+  <!-- Text block -->
+  <text x="64" y="250" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="76" font-weight="800" fill="#FFE135" letter-spacing="-1">Banana Service</text>
+  <text x="66" y="308" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="500" fill="#E5E7EB">Script Management &amp; Community Automation Suite</text>
+
+  <!-- Divider -->
+  <rect x="66" y="336" width="180" height="6" rx="3" fill="#FFE135"/>
+
+  <!-- Feature chips -->
+  <g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="21" font-weight="600">
+    <g>
+      <rect x="66" y="368" width="196" height="46" rx="23" fill="#FFE135" fill-opacity="0.14" stroke="#FFE135" stroke-width="2"/>
+      <text x="90" y="398" fill="#FFE135">Lua Script Vault</text>
+    </g>
+    <g>
+      <rect x="276" y="368" width="196" height="46" rx="23" fill="#FFE135" fill-opacity="0.14" stroke="#FFE135" stroke-width="2"/>
+      <text x="300" y="398" fill="#FFE135">Live Ticket Desk</text>
+    </g>
+    <g>
+      <rect x="486" y="368" width="176" height="46" rx="23" fill="#FFE135" fill-opacity="0.14" stroke="#FFE135" stroke-width="2"/>
+      <text x="510" y="398" fill="#FFE135">YT Tracker</text>
+    </g>
+    <g>
+      <rect x="676" y="368" width="188" height="46" rx="23" fill="#FFE135" fill-opacity="0.14" stroke="#FFE135" stroke-width="2"/>
+      <text x="700" y="398" fill="#FFE135">Anti-Bot Gate</text>
+    </g>
+  </g>
+
+  <!-- Footer line -->
+  <text x="66" y="470" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="19" fill="#9CA3AF">discord.js v14  •  SQLite (WAL)  •  Node.js 20+</text>
+</svg>

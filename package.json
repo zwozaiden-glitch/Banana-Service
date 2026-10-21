@@ -1,0 +1,32 @@
+{
+  "name": "banana-service",
+  "version": "1.0.0",
+  "description": "Banana Service — Premium, High-Performance Discord Bot for Script Management, Community Automation & Server Utilities",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "deploy:guild": "node src/deploy-commands.js --guild",
+    "test": "node --test tests/**/*.test.js"
+  },
+  "keywords": [
+    "discord-bot",
+    "discordjs-v14",
+    "banana-service",
+    "script-management",
+    "lua-scripts",
+    "giveaway",
+    "tickets",
+    "youtube-tracker"
+  ],
+  "author": "Banana Service Team",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "fast-xml-parser": "^4.5.3"
+  }
+}

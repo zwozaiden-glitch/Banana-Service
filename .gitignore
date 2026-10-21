@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Environment variables
+.env
+.env.local
+
+# Bot runtime data
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/scripts/*
+data/transcripts/*
+data/backups/*
+!data/scripts/.gitkeep
+!data/transcripts/.gitkeep
+!data/backups/.gitkeep
+
+# System & IDE
+.DS_Store
+Thumbs.db
+*.log
