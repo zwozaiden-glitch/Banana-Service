@@ -80,13 +80,12 @@ if (config.token) {
   });
 } else {
   console.log(`
-⚠️  DISCORD_TOKEN is not configured in .env!
+⚠️  DISCORD_TOKEN is not configured!
 To connect Banana Service to Discord:
-1. Copy .env.example to .env
-2. Add your bot token: DISCORD_TOKEN=your_token_here
-3. Add your client ID: CLIENT_ID=your_id_here
-4. Run 'npm run deploy' to register slash commands
-5. Run 'npm start' to start the bot
+1. Set DISCORD_TOKEN and CLIENT_ID in your host's environment variables (or a local .env file).
+2. CLIENT_ID is the numeric Discord Application ID; an OAuth client secret is not used.
+3. Run 'npm run deploy' once to register slash commands.
+4. Start with 'npm start' (or 'node index.js' on panels that expect a root entrypoint).
   `);
 }
 
