@@ -188,31 +188,52 @@ npm run dev
 
 ## 🧪 Running Automated Tests
 
-Banana Service includes a native test suite covering file security, database schemas, script versioning, giveaway persistence, ticket categories, and translation tokenization:
+Banana Service ships a native `node:test` suite (no extra test framework required) covering seven areas: the SQLite schema, file security, script versioning/rollback, giveaway persistence, ticket categories, translation tokenisation, and the command registry.
 
 ```bash
 npm test
 ```
 
-Expected output:
+Current results — **33 assertions across 7 suites, all passing**:
+
 ```
-✔ All essential tables exist in schema
-✔ Guild settings can be created and updated
-✔ Allows approved file extensions (.lua, .txt, .json)
-✔ Rejects dangerous or unapproved file extensions (.exe, .sh, .bat)
-✔ Sanitizes filenames and blocks directory traversal attempts
-✔ Safe storage path generates within designated directory
-✔ assertPathInStorage blocks access outside scripts directory
-✔ Records user entries in database
-✔ Prevents duplicate entries from same user in DB
-✔ Uploads a new valid Lua script
-✔ Rejects duplicate script names/slugs in the same guild
-✔ Updates script with version 1.1.0 and records changelog
-✔ Rollbacks script to version 1.0.0
-✔ Deletes script and cleans up version files
-✔ Initializes default ticket categories for new server
-✔ Protects code blocks, inline code, URLs, and Discord mentions
-ℹ tests 25, pass 25, fail 0
+✔ Slash Command Registry Integrity (6 subtests)
+  ✔ Every command exposes data + execute handler
+  ✔ All commands serialize to valid Discord API JSON
+  ✔ Message context menu translation command is registered
+  ✔ No duplicate command names registered
+  ✔ Collection loader maps every command by name
+  ✔ Core feature commands from requirements are present
+  ✔ Subcommand option descriptions stay within Discord limits
+✔ Database Initialization & Schema Validation (2 subtests)
+  ✔ All essential tables exist in schema (18 tables)
+  ✔ Guild settings can be created and updated
+✔ File Security & Path Traversal Protections (5 subtests)
+  ✔ Allows approved file extensions (.lua, .txt, .json)
+  ✔ Rejects dangerous or unapproved file extensions (.exe, .sh, .bat)
+  ✔ Sanitizes filenames and blocks directory traversal attempts
+  ✔ Safe storage path generates within designated directory
+  ✔ assertPathInStorage blocks access outside scripts directory
+✔ GiveawayService Entries & Persistence (3 subtests)
+  ✔ Records user entries in database
+  ✔ Prevents duplicate entries from same user in DB
+  ✔ Cancels giveaway and persists ended state
+✔ ScriptService CRUD, Versioning & Rollback (6 subtests)
+  ✔ Uploads a new valid Lua script
+  ✔ Rejects duplicate script names/slugs in the same guild
+  ✔ Updates script with version 1.1.0 and records changelog
+  ✔ Lists scripts with category filter
+  ✔ Rollbacks script to version 1.0.0
+  ✔ Deletes script and cleans up version files
+✔ TicketService Customizable Categories & Settings (2 subtests)
+  ✔ Initializes default ticket categories for new server
+  ✔ Supports custom category addition and reordering
+✔ Translation Tokenization & Code Preservation (1 subtest)
+  ✔ Protects code blocks, inline code, URLs, and Discord mentions
+
+# tests 33
+# pass 33
+# fail 0
 ```
 
 ---
